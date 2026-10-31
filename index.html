@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de password para router VTR ARRIS</title>
+
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #111;
+            color: #eee;
+        }
+
+        input, button {
+            font-family: monospace;
+            padding: 8px;
+            margin: 5px;
+        }
+
+        pre {
+            background: #1d1d1d;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>ARRIS POTD Generator</h2>
+
+<label>
+    Seed:
+    <input id="seed" value="vtr2014">
+</label>
+
+<label>
+    Días:
+    <input id="days" type="number" value="365" min="1">
+</label>
+
+<button onclick="generateList()">
+    Generar
+</button>
+
+<pre id="output"></pre>
+
+<script>
+const ALPHANUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+const TABLE1 = [
+    [15, 15, 24, 20, 24],
+    [13, 14, 27, 32, 10],
+    [29, 14, 32, 29, 24],
+    [23, 32, 24, 29, 29],
+    [14, 29, 10, 21, 29],
+    [34, 27, 16, 23, 30],
+    [14, 22, 24, 17, 13]
+];
+
+const TABLE2 = [
+    [0, 1, 2, 9, 3, 4, 5, 6, 7, 8],
+    [1, 4, 3, 9, 0, 7, 8, 2, 5, 6],
+    [7, 2, 8, 9, 4, 1, 6, 0, 3, 5],
+    [6, 3, 5, 9, 1, 8, 2, 7, 4, 0],
+    [4, 7, 0, 9, 5, 2, 3, 1, 8, 6],
+    [5, 6, 1, 9, 8, 0, 4, 3, 2, 7]
+];
+
+
+/*
+ * Equivalente a:
+ *
+ * generate(date="YYYY-MM-DD", seed="vtr2014")
+ */
+function generate(dateString, seed) {
+
+    if (!seed || seed.length < 4) {
+        throw new Error("El seed debe tener al menos 4 caracteres.");
+    }
+
+    /*
+     * pypotd rellena seeds menores de 10 caracteres
+     * repitiéndolos.
+     *
+     * vtr2014 -> vtr2014vtr
+     */
+    if (seed.length < 10) {
+
+        const originalSeed = seed;
+        let index = 0;
+
+        while (seed.length < 10) {
+            seed += originalSeed[index % originalSeed.length];
+            index++;
+        }
+    }
+
+
+    const [
+        fullYear,
+        month,
+        day
+    ] = dateString.split("-").map(Number);
+
+
+    const date = new Date(
+        fullYear,
+        month - 1,
+        day
+    );
+
+
+    // Últimos dos dígitos del año
+    const year = fullYear % 100;
+
+
+    /*
+     * JS:
+     * 0 = domingo
+     *
+     * algoritmo:
+     * 0 = lunes
+     */
+    let weekday = date.getDay() - 1;
+
+    if (weekday < 0) {
+        weekday = 6;
+    }
+
+
+    // LISTA 1
+    const l1 = [
+        ...TABLE1[weekday]
+    ];
+
+    l1.push(day);
+
+
+    const difference =
+        year +
+        month -
+        day;
+
+
+    if (difference < 0) {
+        l1.push(
+            (difference + 36) % 36
+        );
+    } else {
+        l1.push(
+            difference % 36
+        );
+    }
+
+
+    l1.push(
+        (
+            (
+                (3 + ((year + month) % 12))
+                * day
+            ) % 37
+        ) % 36
+    );
+
+
+    // LISTA 2
+    const l2 = [];
+
+    for (let i = 0; i < 8; i++) {
+        l2.push(
+            seed.charCodeAt(i) % 36
+        );
+    }
+
+
+    // LISTA 3
+    const l3 = [];
+
+    for (let i = 0; i < 8; i++) {
+        l3.push(
+            (l1[i] + l2[i]) % 36
+        );
+    }
+
+
+    l3.push(
+        l3.reduce(
+            (sum, value) => sum + value,
+            0
+        ) % 36
+    );
+
+
+    const x =
+        (l3[8] % 6) ** 2;
+
+    l3.push(
+        Math.round(x)
+    );
+
+
+    // LISTA 4
+    const tableIndex =
+        l3[8] % 6;
+
+    const l4 = [];
+
+    for (let i = 0; i < 10; i++) {
+
+        l4.push(
+            l3[
+                TABLE2[tableIndex][i]
+            ]
+        );
+    }
+
+
+    // RESULTADO
+    const result = [];
+
+    for (let i = 0; i < 10; i++) {
+
+        result.push(
+            (
+                seed.charCodeAt(i) +
+                l4[i]
+            ) % 36
+        );
+    }
+
+
+    return result
+        .map(index => ALPHANUM[index])
+        .join("");
+}
+
+
+function formatDate(date) {
+
+    const year =
+        date.getFullYear();
+
+    const month =
+        String(
+            date.getMonth() + 1
+        ).padStart(2, "0");
+
+    const day =
+        String(
+            date.getDate()
+        ).padStart(2, "0");
+
+
+    return `${year}-${month}-${day}`;
+}
+
+
+function generateList() {
+
+    const seed =
+        document
+            .getElementById("seed")
+            .value;
+
+    const days =
+        Number(
+            document
+                .getElementById("days")
+                .value
+        );
+
+
+    const output =
+        document.getElementById("output");
+
+
+    const today =
+        new Date();
+
+
+    let result = "";
+
+
+    try {
+
+        for (
+            let i = 0;
+            i < days;
+            i++
+        ) {
+
+            const date =
+                new Date(today);
+
+            date.setDate(
+                today.getDate() + i
+            );
+
+
+            const formattedDate =
+                formatDate(date);
+
+
+            const password =
+                generate(
+                    formattedDate,
+                    seed
+                );
+
+
+            result +=
+                `${formattedDate} ${password}\n`;
+        }
+
+
+        output.textContent =
+            result;
+
+    } catch (error) {
+
+        output.textContent =
+            "Error: " + error.message;
+    }
+}
+
+
+// Generar automáticamente al abrir
+generateList();
+
+</script>
+
+</body>
+</html>
